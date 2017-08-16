@@ -12,7 +12,7 @@ NX = 100
 NY = 100
 
 #Defining the parameters
-TSTEPS = 55
+TSTEPS = 205
 cx = np.array([0,1,0,-1,0,1,-1,-1,1])
 cy = np.array([0,0,1,0,-1,1,1,-1,-1])
 w = np.array([4./9,1./9,1./9,1./9,1./9,1./36,1./36,1./36,1./36])
@@ -25,6 +25,7 @@ omega = 1.0/(3.0*nu + 0.5) #inverse of tau, as in formulation
 #Initializing the arrays
 u = np.zeros((NX,NY))
 v = np.zeros((NX,NY))
+ur = np.empty((NX,NY))
 u_old = np.zeros((NX,NY))
 v_old = np.zeros((NX,NY))
 rho = rhoo * np.ones((NX,NY))
@@ -151,21 +152,58 @@ for t in range(1, TSTEPS):
 					f[8,i,j]=f[8,i-1,j+1]	
 	
 	#BOUNDARY CONDITIONS
-		#Bounce back on west boundary
+	#Bounce back on west boundary
 	f[1,0,:]=f[3,0,:]
 	f[5,0,:]=f[7,0,:]
 	f[8,0,:]=f[6,0,:]
-		#Bounce back on east boundary
+	#Bounce back on east boundary
 	f[3,NX-1,:]=f[1,NX-1,:]
 	f[7,NX-1,:]=f[5,NX-1,:]
 	f[6,NX-1,:]=f[8,NX-1,:]
-		#Bounce back on south boundary
+	#Bounce back on south boundary
 	f[2,0:NX-2,0]=f[4,0:NX-2,0]
 	f[5,0:NX-2,0]=f[7,0:NX-2,0]
 	f[6,0:NX-2,0]=f[8,0:NX-2,0]
-		#Moving Lid, North Boundary
-		#Setting the Lid distribution to eqb
+	#Moving Lid, North Boundary
+	#Setting the Lid distribution to eqb
 	for k in range(9):
 			f[k,:,NY-1] = feq[k,:,NY-1]	
 
+	#COMPUTE FIELDS - rho, u, v
+	ssum=0.0
+	usum=0.0
+	vsum=0.0
+	for k in range(9):
+			ssum += f[k][:][:]
+			usum += f[k][:][:]*cx[k]
+			vsum += f[k][:][:]*cy[k]
+	rho = ssum
+	u = usum/rho
+	v = vsum/rho
 	
+	#COMPUTE ERROR
+	err1 = err = err2 = 0.0
+	ur[:][:] = np.add(np.multiply(u,u), np.multiply(v,v))
+	for i in range(NX):
+			for j in range(NY):
+					err1 +=(u[i][j]-u_old[i][j])*(u[i][j]-u_old[i][j]) + (v[i][j]-v_old[i][j])*(v[i][j]-v_old[i][j])
+					err2 += ur[i][j]
+	err = np.sqrt(err1)/np.sqrt(err2)
+	if t%50 == 0:
+			print("The error is %f\n" %(err))
+	
+	#INTIALIZE LID
+	u[:][NY-1] = uo
+	v[:][NY-1] = 0.0
+	
+	#WRITING TO A FILE
+	if t%200 == 0:
+		result = open("XYuvV_py.dat", "w")
+		result.write("VARIABLES=\"X\",\"Y\",\"U\",\"V\",\"VMag\"\n")
+		result.write("ZONE  F=POINT\n")
+		result.write("I={}, J={}\n".format(NX, NY))
+		for j in range(NY):
+				for i in range(NX):
+						#result.write(i*1.0/NX,"\t",j*1.0/NY, "\t", u[i][j]/uo, "\t",v[i][j]/uo, "\t", ur[i][j]/uo,"\n")
+						result.write("{}\t{}\t{}\t{}\t{}\n".format((i*1.0/NX), (j*1.0/NY), (u[i][j]/uo), (v[i][j]/uo), (ur[i][j]/uo)))
+		result.close();
